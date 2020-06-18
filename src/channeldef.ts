@@ -26,7 +26,6 @@ import {
   ORDER,
   RADIUS,
   RADIUS2,
-  rangeType,
   ROW,
   SHAPE,
   SIZE,
@@ -319,19 +318,30 @@ export interface TypeMixins<T extends Type> {
    * The encoded field's type of measurement (`"quantitative"`, `"temporal"`, `"ordinal"`, or `"nominal"`).
    * It can also be a `"geojson"` type for encoding ['geoshape'](https://vega.github.io/vega-lite/docs/geoshape.html).
    *
+   * __Default value:__
+   *
+   * 1) For a data `field`:
+   * - `nominal` if the encoded field does not contain `aggregate`, `bin`, `sort`, nor `timeUnit`.
+   * - `quantitative` if the encoded field contains `aggregate` or `bin`
+   * - `temporal` if the encoded field contains `timeUnit`
+   * - `ordinal` if the encoded field contains [a custom `sort` order](https://vega.github.io/vega-lite/docs/sort.html#specifying-custom-sort-order).
+   *
+   * 2) For a constant value in data domain (`datum`):
+   * - `quantitative` if the datum is a number
+   * - `nominal` if the datum is a string
+   * - `temporal` if the datum is [a date time object](https://vega.github.io/vega-lite/docs/datetime.html)
    *
    * __Note:__
-   *
-   * - Data values for a temporal field can be either a date-time string (e.g., `"2015-03-07 12:32:17"`, `"17:01"`, `"2015-03-16"`. `"2015"`) or a timestamp number (e.g., `1552199579097`).
    * - Data `type` describes the semantics of the data rather than the primitive data types (number, string, etc.). The same primitive data type can have different types of measurement. For example, numeric data can represent quantitative, ordinal, or nominal data.
+   * - Data values for a temporal field can be either a date-time string (e.g., `"2015-03-07 12:32:17"`, `"17:01"`, `"2015-03-16"`. `"2015"`) or a timestamp number (e.g., `1552199579097`).
    * - When using with [`bin`](https://vega.github.io/vega-lite/docs/bin.html), the `type` property can be either `"quantitative"` (for using a linear bin scale) or [`"ordinal"` (for using an ordinal bin scale)](https://vega.github.io/vega-lite/docs/type.html#cast-bin).
-   * - When using with [`timeUnit`](https://vega.github.io/vega-lite/docs/timeunit.html), the `type` property can be either `"temporal"` (for using a temporal scale) or [`"ordinal"` (for using an ordinal scale)](https://vega.github.io/vega-lite/docs/type.html#cast-bin).
-   * - When using with [`aggregate`](https://vega.github.io/vega-lite/docs/aggregate.html), the `type` property refers to the post-aggregation data type. For example, we can calculate count `distinct` of a categorical field `"cat"` using `{"aggregate": "distinct", "field": "cat", "type": "quantitative"}`. The `"type"` of the aggregate output is `"quantitative"`.
-   * - Secondary channels (e.g., `x2`, `y2`, `xError`, `yError`) do not have `type` as they have exactly the same type as their primary channels (e.g., `x`, `y`).
+   * - When using with [`timeUnit`](https://vega.github.io/vega-lite/docs/timeunit.html), the `type` property can be either `"temporal"` (default, for using a temporal scale) or [`"ordinal"` (for using an ordinal scale)](https://vega.github.io/vega-lite/docs/type.html#cast-bin).
+   * - When using with [`aggregate`](https://vega.github.io/vega-lite/docs/aggregate.html), the `type` property refers to the post-aggregation data type. For example, we can calculate count `distinct` of a categorical field `"cat"` using `{"aggregate": "distinct", "field": "cat"}`. The `"type"` of the aggregate output is `"quantitative"`.
+   * - Secondary channels (e.g., `x2`, `y2`, `xError`, `yError`) do not have `type` as they must have exactly the same type as their primary channels (e.g., `x`, `y`).
    *
    * __See also:__ [`type`](https://vega.github.io/vega-lite/docs/type.html) documentation.
    */
-  type: T;
+  type?: T;
 }
 
 /**
@@ -919,19 +929,16 @@ export function defaultType(fieldDef: TypedFieldDef<Field>, channel: Channel): T
   if (fieldDef.timeUnit) {
     return 'temporal';
   }
-  if (isBinning(fieldDef.bin)) {
+
+  if (fieldDef.aggregate || isBinning(fieldDef.bin)) {
     return 'quantitative';
   }
-  switch (rangeType(channel)) {
-    case 'continuous':
-      return 'quantitative';
-    case 'discrete':
-      return 'nominal';
-    case 'flexible': // color
-      return 'nominal';
-    default:
-      return 'quantitative';
+
+  if (isSortableFieldDef(fieldDef) && isArray(fieldDef.sort)) {
+    return 'ordinal';
   }
+
+  return 'nominal';
 }
 
 /**
